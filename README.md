@@ -20,7 +20,7 @@ AI 기반 10m 공기권총 훈련 보조 및 경기력 향상 애플리케이션
 
 ## 배포
 
-`main` 브랜치에 푸시하면 GitHub Actions가 GitHub Pages로 자동 배포합니다.
+GitHub Pages는 `gh-pages` 브랜치 기준으로 배포됩니다.
 
 배포 주소:
 
