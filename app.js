@@ -19,7 +19,7 @@ const NAV = [
 ];
 
 const TAGS = ["격발", "시선", "자세", "멘탈", "호흡", "손목", "루틴"];
-const SORENESS = ["어깨", "팔꿈치", "손목", "허리", "목", "다리"];
+const SORENESS = ["어깨", "팔", "손목", "허리", "목", "다리"];
 const STORE_KEY = "x10-training-os";
 
 const seedEntries = [
@@ -174,7 +174,7 @@ function icon(name) {
     save: '<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8"/><path d="M8 18h8"/>',
     play: '<path d="M8 5v14l11-7z"/>',
     pause: '<path d="M8 5v14"/><path d="M16 5v14"/>',
-    reset: '<path d="M4 4v6h6"/><path d="M20 12a8 8 0 1 1-2.3-5.7L4 10"/>',
+    reset: '<path d="M3 3v6h6"/><path d="M21 12a9 9 0 0 0-15.6-6.1L3 9"/><path d="M21 21v-6h-6"/><path d="M3 12a9 9 0 0 0 15.6 6.1L21 15"/>',
     plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.dashboard}</svg>`;
