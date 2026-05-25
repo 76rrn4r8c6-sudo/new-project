@@ -1,0 +1,15 @@
+{
+  "name": "X10 Training OS",
+  "short_name": "X10",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0A1A3A",
+  "theme_color": "#0A1A3A",
+  "icons": [
+    {
+      "src": "./assets/images/x10-logo.png",
+      "sizes": "570x318",
+      "type": "image/png"
+    }
+  ]
+}
