@@ -19,7 +19,7 @@ const NAV = [
 ];
 
 const TAGS = ["격발", "시선", "자세", "멘탈", "호흡", "손목", "루틴"];
-const SORENESS = ["어깨", "팔꿈치", "손목", "허리", "목"];
+const SORENESS = ["어깨", "팔꿈치", "손목", "허리", "목", "다리"];
 const STORE_KEY = "x10-training-os";
 
 const seedEntries = [
@@ -169,6 +169,7 @@ function icon(name) {
     condition: '<path d="M12 21s7-4.4 7-11a7 7 0 0 0-14 0c0 6.6 7 11 7 11z"/><path d="M9 10h6"/><path d="M12 7v6"/>',
     chart: '<path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-8"/>',
     coach: '<path d="M4 5h16v11H7l-3 3z"/><path d="M8 9h8"/><path d="M8 13h5"/>',
+    camera: '<path d="M6 7h2l2-3h4l2 3h2a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3z"/><circle cx="12" cy="13" r="4"/>',
     download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
     save: '<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8"/><path d="M8 18h8"/>',
     play: '<path d="M8 5v14l11-7z"/>',
@@ -409,6 +410,26 @@ function renderJournal() {
             <span class="field-label">코치 피드백 태그</span>
             ${tagSelector("tags", TAGS, entry.tags || [])}
           </div>
+          <div class="form-field full scan-box">
+            <span class="field-label">수기 훈련일지 AI 스캔</span>
+            <div class="scan-layout">
+              <label class="scan-uploader">
+                <input id="journalPhoto" type="file" accept="image/*" capture="environment" />
+                <span data-icon="camera"></span>
+                <strong>종이노트 촬영 / 사진 선택</strong>
+                <small>훈련일지를 찍으면 AI가 텍스트로 변환합니다.</small>
+              </label>
+              <img id="scanPreview" class="scan-preview" alt="선택한 훈련일지 사진 미리보기" hidden />
+            </div>
+            <textarea id="ocrText" class="ocr-textarea" placeholder="사진을 선택한 뒤 AI 텍스트 변환을 누르세요. 변환된 텍스트는 여기서 직접 수정할 수 있습니다."></textarea>
+            <div class="tool-row">
+              <button class="mini-button" id="ocrBtn" type="button"><span data-icon="camera"></span>AI 텍스트 변환</button>
+              <button class="mini-button" data-ocr-fill="auto" type="button">피드백/소감 자동 채우기</button>
+              <button class="mini-button" data-ocr-fill="feedback" type="button">코치 피드백에 넣기</button>
+              <button class="mini-button" data-ocr-fill="memo" type="button">오늘의 소감에 넣기</button>
+            </div>
+            <p class="scan-status" id="ocrStatus">사진 속 글자가 선명할수록 인식률이 높습니다.</p>
+          </div>
           ${textareaField("feedback", "코치 피드백", entry.feedback)}
           ${textareaField("memo", "오늘의 소감", entry.memo)}
         </div>
@@ -426,6 +447,7 @@ function renderJournal() {
   `;
   bindSegments();
   bindJournalForm();
+  bindJournalScan();
 }
 
 function field(name, label, type, value, placeholder = "") {
@@ -538,6 +560,121 @@ function bindJournalForm() {
       <p class="summary-line">→ ${entry.memo || "오늘 기록은 누적 데이터로 전환되어 다음 훈련의 기준점이 됩니다."}</p>
     `;
   });
+}
+
+let ocrEnginePromise = null;
+
+function bindJournalScan() {
+  const fileInput = document.querySelector("#journalPhoto");
+  const preview = document.querySelector("#scanPreview");
+  const ocrText = document.querySelector("#ocrText");
+  const status = document.querySelector("#ocrStatus");
+  const feedback = document.querySelector('[name="feedback"]');
+  const memo = document.querySelector('[name="memo"]');
+  if (!fileInput || !ocrText) return;
+
+  let selectedFile = null;
+  let previewUrl = null;
+
+  fileInput.addEventListener("change", () => {
+    selectedFile = fileInput.files?.[0] || null;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    if (!selectedFile) {
+      preview.hidden = true;
+      status.textContent = "사진을 다시 선택해 주세요.";
+      return;
+    }
+    previewUrl = URL.createObjectURL(selectedFile);
+    preview.src = previewUrl;
+    preview.hidden = false;
+    status.textContent = "사진이 선택되었습니다. AI 텍스트 변환을 눌러 주세요.";
+  });
+
+  document.querySelector("#ocrBtn").addEventListener("click", async () => {
+    if (!selectedFile) {
+      toast("먼저 종이노트 사진을 선택해 주세요.");
+      return;
+    }
+    const button = document.querySelector("#ocrBtn");
+    button.disabled = true;
+    status.textContent = "AI OCR 엔진을 준비하고 있습니다.";
+    try {
+      const Tesseract = await loadOcrEngine();
+      const result = await Tesseract.recognize(selectedFile, "kor+eng", {
+        logger: (message) => {
+          if (!message.status) return;
+          const pct = message.progress ? ` ${Math.round(message.progress * 100)}%` : "";
+          status.textContent = `AI가 글자를 읽는 중입니다. ${message.status}${pct}`;
+        },
+      });
+      ocrText.value = cleanScannedText(result.data.text);
+      status.textContent = "텍스트 변환이 완료되었습니다. 내용을 확인하고 수정할 수 있습니다.";
+      toast("수기 일지를 텍스트로 변환했습니다.");
+    } catch (error) {
+      console.error(error);
+      status.textContent = "텍스트 변환에 실패했습니다. 사진을 더 밝고 정면으로 다시 촬영해 주세요.";
+      toast("AI 텍스트 변환에 실패했습니다.");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelectorAll("[data-ocr-fill]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const text = ocrText.value.trim();
+      if (!text) {
+        toast("먼저 변환된 텍스트를 확인해 주세요.");
+        return;
+      }
+      if (button.dataset.ocrFill === "feedback") {
+        feedback.value = appendText(feedback.value, text);
+      } else if (button.dataset.ocrFill === "memo") {
+        memo.value = appendText(memo.value, text);
+      } else {
+        const split = splitScannedJournal(text);
+        feedback.value = appendText(feedback.value, split.feedback);
+        memo.value = appendText(memo.value, split.memo);
+      }
+      toast("변환된 텍스트를 일지에 넣었습니다.");
+    });
+  });
+}
+
+function loadOcrEngine() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (ocrEnginePromise) return ocrEnginePromise;
+  ocrEnginePromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    script.async = true;
+    script.onload = () => resolve(window.Tesseract);
+    script.onerror = () => reject(new Error("OCR engine failed to load."));
+    document.head.append(script);
+  });
+  return ocrEnginePromise;
+}
+
+function cleanScannedText(text) {
+  return text
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function splitScannedJournal(text) {
+  const normalized = text.replace(/\r/g, "");
+  const feedbackMatch = normalized.match(/(?:코치\s*)?피드백\s*[:：]?\s*([\s\S]*?)(?:오늘의\s*소감|소감|느낀점|메모|$)/);
+  const memoMatch = normalized.match(/(?:오늘의\s*소감|소감|느낀점|메모)\s*[:：]?\s*([\s\S]*)/);
+  const feedback = cleanScannedText(feedbackMatch?.[1] || "");
+  const memo = cleanScannedText(memoMatch?.[1] || normalized);
+  return { feedback, memo };
+}
+
+function appendText(current, next) {
+  if (!next) return current || "";
+  return current?.trim() ? `${current.trim()}\n${next}` : next;
 }
 
 function compactCard(label, title, caption) {
@@ -675,7 +812,10 @@ function renderTimer() {
           ${field("sets", "세트 수", "number", timer.sets)}
           ${field("work", "버티기 초", "number", timer.work)}
           ${field("rest", "휴식 초", "number", timer.rest)}
-          ${selectField("side", "시작 팔", ["오른팔", "왼팔"], timer.side)}
+          <div class="form-field">
+            <span class="field-label">팔 순서</span>
+            <div class="toggle-row">오른팔 4세트 → 왼팔 1세트</div>
+          </div>
         </div>
         <div class="tool-row" style="margin-top:16px">
           <button class="mini-button" data-preset="demo" type="button">데모 10초</button>
@@ -694,7 +834,7 @@ function bindTimer() {
     timer.sets = Number(config.sets.value || 30);
     timer.work = Number(config.work.value || 60);
     timer.rest = Number(config.rest.value || 60);
-    timer.side = config.side.value;
+    timer.side = sideForSet(timer.set);
     timer.total = timer.phase === "START" ? timer.work : timer.phase === "STOP" ? timer.rest : 10;
     renderTimerFace();
   });
@@ -743,9 +883,13 @@ function resetTimer(showMessage) {
   timer.remaining = 10;
   timer.total = 10;
   timer.set = 1;
-  timer.side = document.querySelector("#timerConfig")?.side.value || "오른팔";
+  timer.side = sideForSet(timer.set);
   renderTimerFace();
   if (showMessage) toast("타이머를 초기화했습니다.");
+}
+
+function sideForSet(setNumber) {
+  return setNumber % 5 === 0 ? "왼팔" : "오른팔";
 }
 
 function advanceTimer() {
@@ -765,7 +909,7 @@ function advanceTimer() {
       return;
     }
     timer.set += 1;
-    timer.side = timer.side === "오른팔" ? "왼팔" : "오른팔";
+    timer.side = sideForSet(timer.set);
     timer.phase = "START";
     timer.total = timer.work;
     timer.remaining = timer.work;
